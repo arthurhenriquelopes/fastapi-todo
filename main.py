@@ -168,3 +168,16 @@ async def login(creds: UserCredentials):
         return response.session.model_dump() if response.session else {}
     except Exception as e:
         return JSONResponse(status_code=401, content={"error": "Invalid login credentials"})
+
+from fastapi import Request
+
+@app.get("/public/info", summary="Public Info")
+async def public_info():
+    return {"message": "Welcome stranger! This info is public."}
+
+@app.get("/protected/profile", summary="Private Profile")
+async def protected_profile_unverified(request: Request):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return JSONResponse(status_code=401, content={"error": "Access token required"})
+    return {"message": "You provided a token, but it's not verified yet."}
