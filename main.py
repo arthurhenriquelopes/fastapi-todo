@@ -17,6 +17,10 @@ class TaskCreate(BaseModel):
     title: str
     done: Optional[bool] = False
 
+class TaskUpdate(BaseModel):
+    title: Optional[str] = None
+    done: Optional[bool] = None
+
 class Task(TaskBase):
     id: int
 
@@ -63,3 +67,27 @@ async def create_task(task_in: dict):
     }
     tasks_db.append(new_task)
     return new_task
+
+@app.put("/tasks/{task_id}", response_model=Task)
+async def update_task(task_id: int, task_in: dict):
+    if not task_in:
+        return JSONResponse(status_code=400, content={"error": "Body cannot be empty"})
+    for task in tasks_db:
+        if task["id"] == task_id:
+            title = task_in.get("title")
+            if title is not None:
+                if str(title).strip() == "":
+                    return JSONResponse(status_code=400, content={"error": "title cannot be empty"})
+                task["title"] = str(title).strip()
+            if "done" in task_in:
+                task["done"] = bool(task_in["done"])
+            return task
+    raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+@app.delete("/tasks/{task_id}", status_code=204)
+async def delete_task(task_id: int):
+    for i, task in enumerate(tasks_db):
+        if task["id"] == task_id:
+            del tasks_db[i]
+            return
+    raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
