@@ -175,15 +175,33 @@ from fastapi import Request
 async def public_info():
     return {"message": "Welcome stranger! This info is public."}
 
-@app.get("/protected/profile", summary="Private Profile")
-async def protected_profile(request: Request):
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        return JSONResponse(status_code=401, content={"error": "Access token required"})
-    
-    token = auth_header.split(" ")[1]
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Depends
+
+security = HTTPBearer(auto_error=False)
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Access token required")
+    token = credentials.credentials
     try:
         user_response = supabase.auth.get_user(token)
         return user_response.user.model_dump() if user_response.user else {}
     except Exception:
-        return JSONResponse(status_code=401, content={"error": "Invalid or expired token"})
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+@app.get("/protected/profile", summary="Private Profile")
+async def protected_profile(user = Depends(verify_token)):
+    return user
+
+@app.post("/auth/logout", summary="Log Out", status_code=204)
+async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Access token required")
+    token = credentials.credentials
+    try:
+        supabase.auth.sign_out(token)
+    except:
+        pass
+    return
+
