@@ -1,21 +1,31 @@
-# FastAPI To-Do List CRUD (SQLite Version)
+# FastAPI To-Do List CRUD (Docker + PostgreSQL Version)
 
 This is a small API that manages a to-do list: you can **create** tasks, **read** them, **update** them, and **delete** them.
-The data is stored in a permanent SQLite database (`tasks.db`).
+The data is now stored in a real **PostgreSQL** database running inside a Docker container.
 
-Built as part of the Backend Track - Week 3 Assignment (A2).
+Built as part of the Backend Track - Week 3 Assignment (A3).
 
-## Why SQLite?
-SQLite is a lightweight, zero-configuration SQL database that stores all data in a single file (`tasks.db`). It's perfect for small projects because it requires no separate database server to run, yet it provides full SQL capabilities, ensuring our data persists between server restarts.
+## Why Docker and PostgreSQL?
+We moved from a local SQLite database to a full PostgreSQL database to simulate a production-grade environment. Using **Docker Compose**, we can launch both the API and the database at the same time with a single command. The Postgres data is persisted using Docker volumes, meaning our tasks will survive container restarts.
+
+*Note: The routes and services were untouched during this swap, proving that the storage layer is just an implementation detail!*
 
 ## How to Install & Run
 
-Ensure you have Python 3.10+ installed. Then run the following command in the project directory:
+Ensure you have [Docker](https://docs.docker.com/get-docker/) and `docker-compose` installed.
+Simply run the following command in the project directory:
 
 ```bash
-pip install -r requirements.txt && uvicorn main:app --reload --port 8000
+docker compose up -d
 ```
-Upon running, the API will automatically create the `tasks.db` file and populate it with 3 sample tasks if it's empty.
+The API will be available at `http://localhost:8000`.
+
+## How Persistence was Proven
+To verify that the volume works correctly:
+1. Ran `docker compose up -d`.
+2. Created a new task using a `POST /tasks` request.
+3. Restarted the containers with `docker compose down` and `docker compose up -d`.
+4. The task was still there when checking `GET /tasks`.
 
 ## Endpoints
 
@@ -28,27 +38,6 @@ Upon running, the API will automatically create the `tasks.db` file and populate
 | POST        | `/tasks` | Creates a new task (requires JSON body with `title`) |
 | PUT         | `/tasks/{id}` | Updates an existing task's `title` or `done` status |
 | DELETE      | `/tasks/{id}` | Removes a task by ID |
-
-## Example `curl` Output
-
-```bash
-$ curl -i http://localhost:8000/tasks/1
-HTTP/1.1 200 OK
-date: Wed, 12 Aug 2026 17:00:00 GMT
-server: uvicorn
-content-length: 49
-content-type: application/json
-
-{"title":"Buy groceries","done":false,"id":1}
-```
-
-## Example SQL Query Executed
-```sql
-SELECT * FROM tasks WHERE done = 1;
-```
-
-## Database Screenshot
-![Database Viewer](docs/db_screenshot.png)
 
 ## Swagger UI Screenshot
 ![Swagger UI](docs/swagger_screenshot.png)
