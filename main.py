@@ -3,7 +3,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
-app = FastAPI()
+app = FastAPI(
+    title="Task API",
+    description="A simple CRUD API for a to-do list.",
+    version="1.0"
+)
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc):
@@ -35,26 +39,26 @@ def get_next_id() -> int:
         return 1
     return max(task["id"] for task in tasks_db) + 1
 
-@app.get("/")
+@app.get("/", summary="Root Endpoint", description="Returns API metadata.")
 async def root():
     return {"name": "Task API", "version": "1.0", "endpoints": ["/tasks"]}
 
-@app.get("/health")
+@app.get("/health", summary="Health Check", description="Returns ok if the API is running.")
 async def health():
     return {"status": "ok"}
 
-@app.get("/tasks", response_model=List[Task])
+@app.get("/tasks", summary="List Tasks", description="Returns the complete list of tasks.", response_model=List[Task])
 async def get_tasks():
     return tasks_db
 
-@app.get("/tasks/{task_id}", response_model=Task)
+@app.get("/tasks/{task_id}", summary="Get Task", description="Returns a specific task by ID.", response_model=Task)
 async def get_task(task_id: int):
     for task in tasks_db:
         if task["id"] == task_id:
             return task
     raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
 
-@app.post("/tasks", response_model=Task, status_code=201)
+@app.post("/tasks", summary="Create Task", description="Creates a new task.", response_model=Task, status_code=201)
 async def create_task(task_in: dict):
     title = task_in.get("title")
     if title is None or str(title).strip() == "":
@@ -68,7 +72,7 @@ async def create_task(task_in: dict):
     tasks_db.append(new_task)
     return new_task
 
-@app.put("/tasks/{task_id}", response_model=Task)
+@app.put("/tasks/{task_id}", summary="Update Task", description="Updates an existing task.", response_model=Task)
 async def update_task(task_id: int, task_in: dict):
     if not task_in:
         return JSONResponse(status_code=400, content={"error": "Body cannot be empty"})
@@ -84,7 +88,7 @@ async def update_task(task_id: int, task_in: dict):
             return task
     raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
 
-@app.delete("/tasks/{task_id}", status_code=204)
+@app.delete("/tasks/{task_id}", summary="Delete Task", description="Deletes a task by ID.", status_code=204)
 async def delete_task(task_id: int):
     for i, task in enumerate(tasks_db):
         if task["id"] == task_id:
