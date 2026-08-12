@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional
+from supabase import create_client, Client
 
 load_dotenv()
 
@@ -16,6 +17,13 @@ app = FastAPI(
 )
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/tasks_db")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError("Missing Supabase credentials in .env")
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def get_db():
     conn = psycopg2.connect(DATABASE_URL)
