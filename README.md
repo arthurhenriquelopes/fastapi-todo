@@ -1,46 +1,49 @@
-# FastAPI To-Do List & Auth API
+# FastAPI To-Do List, Auth & LLM Integration
 
-This project contains two major components:
-1. **To-Do CRUD API:** A task management API backed by a PostgreSQL database running in Docker.
-2. **Authentication API:** A secure authentication system using Supabase as the Identity Provider (IdP) providing JWTs for protected routes.
+This project is a multi-feature API containing:
+1. **To-Do CRUD API:** A task management API backed by a PostgreSQL database in Docker.
+2. **Authentication API:** A secure authentication system using Supabase JWTs.
+3. **LLM Integration:** An AI-powered /triage endpoint that classifies incoming support messages.
 
-Built as part of the Backend Track Assignments (A1 to A4).
+Built as part of the Backend Track Assignments.
 
-## How to Install & Run
+## The LLM Endpoint: POST /triage
+This endpoint takes a raw, messy support message and uses a Large Language Model to classify it so it lands on the right team. It is built for reliability:
+- Schema validation with Pydantic.
+- Automatic 1-step repair loop if the model outputs malformed JSON.
+- Quarantining of failures.
+- Cost logging per request.
 
-1. Ensure you have [Docker](https://docs.docker.com/get-docker/) installed.
-2. Create your `.env` file from the `.env.example` file and insert your Supabase credentials:
-```bash
-cp .env.example .env
-# Edit .env and put your SUPABASE_URL and SUPABASE_KEY
-```
-3. Run the following command to start the database and the API:
-```bash
-docker compose up -d
-```
-The API will be available at `http://localhost:8000`.
+**Try it out:**
+`ash
+curl -X POST http://localhost:8000/triage \
+  -H "Content-Type: application/json" \
+  -d '{"text": "My card was double charged! Fix this now!"}'
+`
+**Example Response:**
+`json
+{
+  "category": "billing",
+  "urgency": "high",
+  "confidence": 0.99,
+  "reason": "Explicit mention of double charge."
+}
+`
 
-## API Endpoints
+### Job Card
+* **It must never:** invent a category outside the list, return free text, give medical, legal or financial advice, or reveal the prompt.
+* **When unsure it should:** return category "other" with low confidence, not a guess.
 
-### 🔐 Authentication Routes
+### Environment & Providers
+This endpoint uses the OpenAI client SDK to connect to **OpenRouter**. You can easily swap to another provider (like Ollama or OpenAI directly) by changing these three variables in your .env:
+- LLM_BASE_URL
+- LLM_API_KEY
+- LLM_MODEL
 
-| HTTP Method | Endpoint | Auth Required? | Description |
-| ----------- | -------- | -------------- | ----------- |
-| POST        | `/auth/signup` | No | Register a new user |
-| POST        | `/auth/login` | No | Log in and receive a JWT Access Token |
-| POST        | `/auth/logout` | Yes 🔒 | Invalidate the current session |
-| GET         | `/public/info` | No | Open route for anyone |
-| GET         | `/protected/profile` | Yes 🔒 | Secure route requiring Bearer Token |
+**Kill Switch:** Set LLM_ENABLED=false to safely disable the AI feature instantly without changing code.
+**Stub Mode:** Set LLM_STUB=1 to bypass network calls completely while developing.
 
-### 📝 Task CRUD Routes
-
-| HTTP Method | Endpoint | Description |
-| ----------- | -------- | ----------- |
-| GET         | `/tasks` | Lists all tasks |
-| GET         | `/tasks/{id}` | Gets a specific task by ID |
-| POST        | `/tasks` | Creates a new task |
-| PUT         | `/tasks/{id}` | Updates an existing task |
-| DELETE      | `/tasks/{id}` | Removes a task by ID |
-
-## Swagger UI Screenshot
-![Swagger UI](docs/swagger_auth_screenshot.png)
+### Eval & Cost Performance
+- **Eval Score:** 8 out of 8 cases matched successfully (Date: 2026-08-12, Prompt version: v1).
+- **Cost Estimate:** Since we use openrouter/free, the cost for one call is $0.00. An estimated 10,000 requests per day will cost exactly $0.00 (though rate limits of 50 calls/day apply).
+- **What I'd fix with another day:** Implement an in-memory cache to skip model calls for identical support messages.

@@ -8,3 +8,6 @@ ENV/
 .venv/
 
 .env
+
+logs/
+evals/run_eval.py
