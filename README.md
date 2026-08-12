@@ -1,55 +1,85 @@
-# FastAPI To-Do List, Auth & LLM Integration
+# FlyRank Backend Engineering Internship
 
-This project is a multi-feature API containing:
-1. **To-Do CRUD API:** A task management API backed by a PostgreSQL database in Docker.
-2. **Authentication API:** A secure authentication system using Supabase JWTs.
-3. **LLM Integration:** An AI-powered /triage endpoint that classifies incoming support messages.
+![FlyRank Internship](https://img.shields.io/badge/FlyRank-Backend%20AI%20Engineering-success)
+![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=flat&logo=fastapi)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
+![React](https://img.shields.io/badge/React-20232A?style=flat&logo=react&logoColor=61DAFB)
 
-Built as part of the Backend Track Assignments.
+## About
+Welcome to my backend engineering portfolio for the **FlyRank Internship (Backend AI Engineering Track)**. This repository is a monorepo that houses a full-stack, AI-powered system designed to demonstrate professional engineering practices. It combines a robust Python/FastAPI backend with a React frontend, integrating modern tools like Supabase, Docker, PostgreSQL, OpenAI (OpenRouter), and Inngest.
 
-## The LLM Endpoint: POST /triage
-This endpoint takes a raw, messy support message and uses a Large Language Model to classify it so it lands on the right team. It is built for reliability:
-- Schema validation with Pydantic.
-- Automatic 1-step repair loop if the model outputs malformed JSON.
-- Quarantining of failures.
-- Cost logging per request.
+Over the course of this internship, I have built multiple features scaling from a simple CRUD API up to complex, resilient AI background workflows.
 
-**Try it out:**
-`ash
-curl -X POST http://localhost:8000/triage \
-  -H "Content-Type: application/json" \
-  -d '{"text": "My card was double charged! Fix this now!"}'
-`
-**Example Response:**
-`json
-{
-  "category": "billing",
-  "urgency": "high",
-  "confidence": 0.99,
-  "reason": "Explicit mention of double charge."
-}
-`
+---
 
-### Job Card
-* **It must never:** invent a category outside the list, return free text, give medical, legal or financial advice, or reveal the prompt.
-* **When unsure it should:** return category "other" with low confidence, not a guess.
+## 📚 Assignments & Features
 
-### Environment & Providers
-This endpoint uses the OpenAI client SDK to connect to **OpenRouter**. You can easily swap to another provider (like Ollama or OpenAI directly) by changing these three variables in your .env:
-- LLM_BASE_URL
-- LLM_API_KEY
-- LLM_MODEL
+### 1. The Core: To-Do CRUD API & Dockerization (A1, A2, A3)
+The foundation of the project is a blazing-fast CRUD API built with **FastAPI** and backed by a **PostgreSQL** database. 
+- **Features:** Create, Read, Update, and Delete tasks. 
+- **Persistence:** Fully containerized using `docker-compose.yml` to ensure deterministic setups.
+- **Documentation:** Interactive Swagger UI generated automatically.
 
-**Kill Switch:** Set LLM_ENABLED=false to safely disable the AI feature instantly without changing code.
-**Stub Mode:** Set LLM_STUB=1 to bypass network calls completely while developing.
+![Database Architecture](assets/db_screenshot_1786566180170.jpg)
+![Swagger UI](assets/swagger_screenshot_1786554952333.jpg)
 
-### Eval & Cost Performance
-- **Eval Score:** 8 out of 8 cases matched successfully (Date: 2026-08-12, Prompt version: v1).
-- **Cost Estimate:** Since we use openrouter/free, the cost for one call is $0.00. An estimated 10,000 requests per day will cost exactly $0.00 (though rate limits of 50 calls/day apply).
-- **What I'd fix with another day:** Implement an in-memory cache to skip model calls for identical support messages.
+### 2. Security: Supabase JWT Authentication (BE-03)
+To secure the application, I integrated **Supabase Auth**.
+- **Features:** User Sign-up, Login, and Logout routes.
+- **Protection:** Protected profile routes wrapped in a dependency that verifies the JWT token signature and decodes the user session.
+- **Swagger Integration:** Configured the OpenAPI spec to natively accept Bearer Tokens for testing authenticated routes.
 
-## Assignment BE-06: Background Job
-The /triage endpoint now implements the professional pattern for slow tasks: **accept fast, work in the background, report status.**
-- POST /triage returns a 202 Accepted instantly and hands off the LLM call to a background worker.
-- It includes idempotency keys: duplicate requests will safely return the existing job_id.
-- Track progress via GET /triage/{job_id}, checking if the status is pending, processing, completed, or ailed.
+![Swagger Authentication](assets/swagger_auth_screenshot_1786567598585.jpg)
+
+### 3. Data Collection: The Polite Scraper (A9)
+A Python scraper built to cleanly extract e-commerce data from a practice sandbox.
+- **Features:** Fetches catalogue pages, extracts nested book data, and caches responses to disk to prevent hammering the server.
+- **Politeness:** Implements 0.5s delays, custom User-Agents, and respects failure limits.
+- **Validation:** Uses Pydantic to strictly parse unstructured HTML prices ("£51.77") into valid Floats, quarantining bad data.
+
+### 4. AI Integration: Triage LLM Endpoint (A17)
+Integrating a Large Language Model the professional way—not as a chatbot, but as a rigid classification tool.
+- **Features:** The `POST /triage` endpoint takes a messy customer support message and asks an LLM (via OpenRouter) to classify the category and urgency.
+- **Resilience:** If the LLM returns invalid JSON or disobeys the schema, the system catches the exception and sends a **Repair Prompt** automatically.
+- **Safety:** Built with strict timeouts, Cost Logging (tokens per request), and a deterministic Kill Switch (`LLM_ENABLED=false`).
+
+### 5. Asynchronous Scale: Background Jobs (BE-06)
+AI calls are slow. Professional APIs don't block the main thread waiting for an LLM to type.
+- **Features:** Moved the Triage LLM call into a background worker using FastAPI `BackgroundTasks` and a SQL job queue.
+- **Workflow:** The endpoint immediately returns `202 Accepted` and a `job_id`. Clients can poll `GET /triage/{job_id}` to retrieve the results.
+- **Idempotency:** Implemented SHA-256 payload hashing so identical requests won't trigger duplicate LLM calls, saving API quota.
+
+![LLM Architecture Diagram](assets/llm_architecture_diagram_1786570417599.jpg)
+
+### 6. Orchestration: AI Decision Flow with React Flow & Inngest (W7)
+A complete Visual AI Workflow Editor where developers can design branching logic for LLMs.
+- **Frontend (React Flow):** A Vite + Tailwind application (`frontend/`) where users can add nodes, write prompts, and draw YES/NO paths visually.
+- **Backend Orchestration (Inngest):** The graph is sent to the FastAPI backend, where an **Inngest** function dynamically traverses the nodes. At each node, it sends the prompt to the AI, forcing a binary `YES/NO` answer, and routes the execution path accordingly.
+
+![React Flow Visualizer](assets/react_flow_mockup_1786570409533.jpg)
+
+---
+
+## 🚀 How to Run
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/arthurhenriquelopes/fastapi-todo.git
+   cd fastapi-todo
+   ```
+
+2. **Setup Environment:**
+   Create a `.env` file in the root directory using `.env.example` as a template and provide your OpenRouter and Supabase keys.
+
+3. **Start the Backend:**
+   ```bash
+   docker compose up --build -d
+   ```
+   The API will be live at `http://localhost:8000/docs`.
+
+4. **Start the Visual Editor (Frontend):**
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
