@@ -144,3 +144,27 @@ async def delete_task(task_id: int):
     conn.commit()
     conn.close()
     return
+
+class UserCredentials(BaseModel):
+    email: str
+    password: str
+
+@app.post("/auth/signup", summary="Sign Up", status_code=201)
+async def signup(creds: UserCredentials):
+    if not creds.email or not creds.password:
+        return JSONResponse(status_code=400, content={"error": "Missing email or password"})
+    try:
+        response = supabase.auth.sign_up({"email": creds.email, "password": creds.password})
+        return response.user.model_dump() if response.user else {}
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+
+@app.post("/auth/login", summary="Log In")
+async def login(creds: UserCredentials):
+    if not creds.email or not creds.password:
+        return JSONResponse(status_code=400, content={"error": "Missing email or password"})
+    try:
+        response = supabase.auth.sign_in_with_password({"email": creds.email, "password": creds.password})
+        return response.session.model_dump() if response.session else {}
+    except Exception as e:
+        return JSONResponse(status_code=401, content={"error": "Invalid login credentials"})
