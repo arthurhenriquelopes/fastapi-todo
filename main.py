@@ -219,4 +219,17 @@ async def triage_message(payload: TriageInput):
             reason="Stub mode enabled."
         ).model_dump()
         
-    return {"message": "Model call goes here."}
+    from src.llm.client import llm_client
+    with open("prompts/triage-v1.md", "r", encoding="utf-8") as f:
+        system_prompt = f.read()
+        
+    res = llm_client.chat.completions.create(
+        model=os.environ.get("LLM_MODEL", "openrouter/free"),
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": payload.text}
+        ],
+        temperature=0.0
+    )
+    return {"raw_output": res.choices[0].message.content}
+
