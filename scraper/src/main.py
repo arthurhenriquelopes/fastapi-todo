@@ -3,6 +3,7 @@ import time
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+from datetime import datetime, timezone
 
 CACHE_DIR = "cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
@@ -11,11 +12,9 @@ USER_AGENT = "FlyRankInternship-A9/1.0 (+https://github.com/arthurhenriquelopes/
 def fetch_and_cache(url: str, filename: str) -> str:
     cache_path = os.path.join(CACHE_DIR, filename)
     if os.path.exists(cache_path):
-        print(f"CACHE HIT: {url}")
         with open(cache_path, "r", encoding="utf-8") as f:
             return f.read()
             
-    print(f"FETCH: {url}")
     time.sleep(0.5)
     headers = {"User-Agent": USER_AGENT}
     response = requests.get(url, headers=headers, timeout=10)
@@ -47,9 +46,55 @@ def discover_all_books():
         links = get_book_links(html, url)
         all_book_links.extend(links)
         
-    unique_links = list(set(all_book_links))
-    print(f"catalogue_pages=3, discovered={len(all_book_links)}, unique_urls={len(unique_links)}")
-    return unique_links
+    return list(set(all_book_links))
+
+def extract_book_details(html: str, url: str) -> dict:
+    soup = BeautifulSoup(html, "html.parser")
+    title = soup.find("h1").text if soup.find("h1") else None
+    
+    price_text = None
+    price_p = soup.find("p", class_="price_color")
+    if price_p:
+        price_text = price_p.text
+        
+    availability_text = None
+    avail_p = soup.find("p", class_="availability")
+    if avail_p:
+        availability_text = avail_p.text.strip()
+        
+    rating_text = None
+    rating_p = soup.find("p", class_="star-rating")
+    if rating_p:
+        classes = rating_p.get("class", [])
+        if len(classes) > 1:
+            rating_text = classes[1]
+            
+    description = None
+    desc_div = soup.find("div", id="product_description")
+    if desc_div:
+        desc_p = desc_div.find_next_sibling("p")
+        if desc_p:
+            description = desc_p.text
+            
+    return {
+        "title": title,
+        "product_url": url,
+        "price_text": price_text,
+        "availability_text": availability_text,
+        "rating_text": rating_text,
+        "description": description,
+        "source_page": url,
+        "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    }
 
 if __name__ == "__main__":
     unique_links = discover_all_books()
+    records = []
+    for i, url in enumerate(unique_links):
+        html = fetch_and_cache(url, f"book-{i}.html")
+        record = extract_book_details(html, url)
+        records.append(record)
+    
+    if records:
+        print(records[0])
+    print(f"detail_pages={len(records)}")
