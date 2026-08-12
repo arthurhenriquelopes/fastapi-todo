@@ -220,16 +220,54 @@ async def triage_message(payload: TriageInput):
         ).model_dump()
         
     from src.llm.client import llm_client
+    import json
+    from pydantic import ValidationError
+    
     with open("prompts/triage-v1.md", "r", encoding="utf-8") as f:
         system_prompt = f.read()
         
-    res = llm_client.chat.completions.create(
-        model=os.environ.get("LLM_MODEL", "openrouter/free"),
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": payload.text}
-        ],
-        temperature=0.0
-    )
-    return {"raw_output": res.choices[0].message.content}
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": payload.text}
+    ]
+    
+    def call_model(msgs):
+        res = llm_client.chat.completions.create(
+            model=os.environ.get("LLM_MODEL", "openrouter/free"),
+            messages=msgs,
+            temperature=0.0
+        )
+        return res.choices[0].message.content
+        
+    raw_output = call_model(messages)
+    
+    # Parse and repair loop
+    try:
+        # Strip markdown code blocks if any
+        clean_json = raw_output.strip().removeprefix("`json").removesuffix("`").strip()
+        data = json.loads(clean_json)
+        validated = TriageOutput(**data)
+        return validated.model_dump()
+    except (json.JSONDecodeError, ValidationError) as e:
+        # Repair once
+        repair_msg = f"Your previous answer was rejected for this reason: {str(e)}. Return only corrected JSON matching the schema."
+        messages.append({"role": "assistant", "content": raw_output})
+        messages.append({"role": "user", "content": repair_msg})
+        
+        repaired_output = call_model(messages)
+        try:
+            clean_json = repaired_output.strip().removeprefix("`json").removesuffix("`").strip()
+            data = json.loads(clean_json)
+            validated = TriageOutput(**data)
+            return validated.model_dump()
+        except Exception as repair_e:
+            with open("logs/quarantine.jsonl", "a", encoding="utf-8") as log_f:
+                log_f.write(json.dumps({
+                    "input": payload.text,
+                    "prompt_version": "v1",
+                    "raw_output": repaired_output,
+                    "error": str(repair_e)
+                }) + "\n")
+            return JSONResponse(status_code=422, content={"error": "Failed to generate valid output", "details": str(repair_e)})
+
 
