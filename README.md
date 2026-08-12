@@ -41,5 +41,3 @@ content-type: application/json
 ## Swagger UI Screenshot
 
 ![Swagger UI](docs/swagger_screenshot.png)
-
-*(Note: Ensure you place your screenshot at `docs/swagger_screenshot.png` before pushing!)*
