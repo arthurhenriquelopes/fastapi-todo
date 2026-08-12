@@ -55,12 +55,6 @@ class TaskUpdate(BaseModel):
 class Task(TaskBase):
     id: int
 
-tasks_db: List[dict] = [
-    {"id": 1, "title": "Buy groceries", "done": False},
-    {"id": 2, "title": "Read a book", "done": True},
-    {"id": 3, "title": "Write some code", "done": False}
-]
-
 @app.get("/", summary="Root Endpoint", description="Returns API metadata.")
 async def root():
     return {"name": "Task API", "version": "1.0", "endpoints": ["/tasks"]}
@@ -104,22 +98,41 @@ async def create_task(task_in: dict):
 async def update_task(task_id: int, task_in: dict):
     if not task_in:
         return JSONResponse(status_code=400, content={"error": "Body cannot be empty"})
-    for task in tasks_db:
-        if task["id"] == task_id:
-            title = task_in.get("title")
-            if title is not None:
-                if str(title).strip() == "":
-                    return JSONResponse(status_code=400, content={"error": "title cannot be empty"})
-                task["title"] = str(title).strip()
-            if "done" in task_in:
-                task["done"] = bool(task_in["done"])
-            return task
-    raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    
+    conn = get_db()
+    task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    
+    if task is None:
+        conn.close()
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+        
+    title = task["title"]
+    done = task["done"]
+    
+    if "title" in task_in:
+        if task_in["title"] is None or str(task_in["title"]).strip() == "":
+            conn.close()
+            return JSONResponse(status_code=400, content={"error": "title cannot be empty"})
+        title = str(task_in["title"]).strip()
+        
+    if "done" in task_in:
+        done = bool(task_in["done"])
+        
+    conn.execute("UPDATE tasks SET title = ?, done = ? WHERE id = ?", (title, done, task_id))
+    conn.commit()
+    conn.close()
+    
+    return {"id": task_id, "title": title, "done": bool(done)}
 
 @app.delete("/tasks/{task_id}", summary="Delete Task", description="Deletes a task by ID.", status_code=204)
 async def delete_task(task_id: int):
-    for i, task in enumerate(tasks_db):
-        if task["id"] == task_id:
-            del tasks_db[i]
-            return
-    raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    conn = get_db()
+    task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    if task is None:
+        conn.close()
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+        
+    conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+    conn.commit()
+    conn.close()
+    return
