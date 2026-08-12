@@ -1,43 +1,46 @@
-# FastAPI To-Do List CRUD (Docker + PostgreSQL Version)
+# FastAPI To-Do List & Auth API
 
-This is a small API that manages a to-do list: you can **create** tasks, **read** them, **update** them, and **delete** them.
-The data is now stored in a real **PostgreSQL** database running inside a Docker container.
+This project contains two major components:
+1. **To-Do CRUD API:** A task management API backed by a PostgreSQL database running in Docker.
+2. **Authentication API:** A secure authentication system using Supabase as the Identity Provider (IdP) providing JWTs for protected routes.
 
-Built as part of the Backend Track - Week 3 Assignment (A3).
-
-## Why Docker and PostgreSQL?
-We moved from a local SQLite database to a full PostgreSQL database to simulate a production-grade environment. Using **Docker Compose**, we can launch both the API and the database at the same time with a single command. The Postgres data is persisted using Docker volumes, meaning our tasks will survive container restarts.
-
-*Note: The routes and services were untouched during this swap, proving that the storage layer is just an implementation detail!*
+Built as part of the Backend Track Assignments (A1 to A4).
 
 ## How to Install & Run
 
-Ensure you have [Docker](https://docs.docker.com/get-docker/) and `docker-compose` installed.
-Simply run the following command in the project directory:
-
+1. Ensure you have [Docker](https://docs.docker.com/get-docker/) installed.
+2. Create your `.env` file from the `.env.example` file and insert your Supabase credentials:
+```bash
+cp .env.example .env
+# Edit .env and put your SUPABASE_URL and SUPABASE_KEY
+```
+3. Run the following command to start the database and the API:
 ```bash
 docker compose up -d
 ```
 The API will be available at `http://localhost:8000`.
 
-## How Persistence was Proven
-To verify that the volume works correctly:
-1. Ran `docker compose up -d`.
-2. Created a new task using a `POST /tasks` request.
-3. Restarted the containers with `docker compose down` and `docker compose up -d`.
-4. The task was still there when checking `GET /tasks`.
+## API Endpoints
 
-## Endpoints
+### 🔐 Authentication Routes
+
+| HTTP Method | Endpoint | Auth Required? | Description |
+| ----------- | -------- | -------------- | ----------- |
+| POST        | `/auth/signup` | No | Register a new user |
+| POST        | `/auth/login` | No | Log in and receive a JWT Access Token |
+| POST        | `/auth/logout` | Yes 🔒 | Invalidate the current session |
+| GET         | `/public/info` | No | Open route for anyone |
+| GET         | `/protected/profile` | Yes 🔒 | Secure route requiring Bearer Token |
+
+### 📝 Task CRUD Routes
 
 | HTTP Method | Endpoint | Description |
 | ----------- | -------- | ----------- |
-| GET         | `/` | Root endpoint, describes the API |
-| GET         | `/health` | Health check to see if server is alive |
 | GET         | `/tasks` | Lists all tasks |
 | GET         | `/tasks/{id}` | Gets a specific task by ID |
-| POST        | `/tasks` | Creates a new task (requires JSON body with `title`) |
-| PUT         | `/tasks/{id}` | Updates an existing task's `title` or `done` status |
+| POST        | `/tasks` | Creates a new task |
+| PUT         | `/tasks/{id}` | Updates an existing task |
 | DELETE      | `/tasks/{id}` | Removes a task by ID |
 
 ## Swagger UI Screenshot
-![Swagger UI](docs/swagger_screenshot.png)
+![Swagger UI](docs/swagger_auth_screenshot.png)
