@@ -206,33 +206,82 @@ async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
     return
 
 
-# --- LLM Endpoint ---
-from src.llm.schema import TriageInput, TriageOutput, CategoryEnum, UrgencyEnum
+# --- Background Job / LLM Endpoint ---
+from src.llm.schema import TriageInput, TriageOutput, CategoryEnum, UrgencyEnum, JobStatusEnum, TriageJobResponse
+from fastapi import BackgroundTasks
+import uuid
+import hashlib
 
-@app.post("/triage", summary="Triage Support Message")
-async def triage_message(payload: TriageInput):
-    if os.environ.get("LLM_ENABLED") == "false":
-        return JSONResponse(status_code=503, content={"error": "LLM features are currently disabled via kill switch."})
+@app.on_event("startup")
+async def startup_event():
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS triage_jobs (
+            id VARCHAR(36) PRIMARY KEY,
+            idempotency_key VARCHAR(255) UNIQUE,
+            status VARCHAR(20) NOT NULL,
+            category VARCHAR(50),
+            urgency VARCHAR(50),
+            confidence FLOAT,
+            reason TEXT,
+            error TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def process_triage_job(job_id: str, payload_text: str):
+    import json
+    import time
+    from pydantic import ValidationError
+    from src.llm.client import llm_client
+    
+    # Mark as processing
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE triage_jobs SET status = 'processing' WHERE id = %s", (job_id,))
+    conn.commit()
+    
+    def mark_failed(error_msg: str):
+        cursor.execute("UPDATE triage_jobs SET status = 'failed', error = %s WHERE id = %s", (error_msg, job_id))
+        conn.commit()
+        conn.close()
         
+    def mark_completed(data: TriageOutput):
+        cursor.execute('''
+            UPDATE triage_jobs 
+            SET status = 'completed', category = %s, urgency = %s, confidence = %s, reason = %s
+            WHERE id = %s
+        ''', (data.category.value, data.urgency.value, data.confidence, data.reason, job_id))
+        conn.commit()
+        conn.close()
+    
     if os.environ.get("LLM_STUB") == "1":
-        return TriageOutput(
+        time.sleep(1) # simulate work
+        mark_completed(TriageOutput(
             category=CategoryEnum.other,
             urgency=UrgencyEnum.normal,
             confidence=1.0,
             reason="Stub mode enabled."
-        ).model_dump()
+        ))
+        return
         
-    from src.llm.client import llm_client
-    import json
-    import time
-    from pydantic import ValidationError
-    
-    with open("prompts/triage-v1.md", "r", encoding="utf-8") as f:
-        system_prompt = f.read()
+    if os.environ.get("LLM_ENABLED") == "false":
+        mark_failed("LLM features are currently disabled via kill switch.")
+        return
+        
+    try:
+        with open("prompts/triage-v1.md", "r", encoding="utf-8") as f:
+            system_prompt = f.read()
+    except Exception as e:
+        mark_failed(f"Failed to load prompt: {str(e)}")
+        return
         
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": payload.text}
+        {"role": "user", "content": payload_text}
     ]
     
     def call_model(msgs):
@@ -259,14 +308,15 @@ async def triage_message(payload: TriageInput):
     try:
         raw_output = call_model(messages)
     except Exception as network_e:
-        return JSONResponse(status_code=504, content={"error": "LLM provider took too long or failed", "details": str(network_e)})
-    
+        mark_failed(f"LLM provider took too long or failed: {str(network_e)}")
+        return
+        
     # Parse and repair loop
     try:
         clean_json = raw_output.strip().removeprefix("`json").removesuffix("`").strip()
         data = json.loads(clean_json)
         validated = TriageOutput(**data)
-        return validated.model_dump()
+        mark_completed(validated)
     except (json.JSONDecodeError, ValidationError) as e:
         # Repair once
         repair_msg = f"Your previous answer was rejected for this reason: {str(e)}. Return only corrected JSON matching the schema."
@@ -276,22 +326,75 @@ async def triage_message(payload: TriageInput):
         try:
             repaired_output = call_model(messages)
         except Exception as network_e:
-             return JSONResponse(status_code=504, content={"error": "LLM provider took too long or failed during repair", "details": str(network_e)})
+            mark_failed(f"LLM provider took too long or failed during repair: {str(network_e)}")
+            return
              
         try:
             clean_json = repaired_output.strip().removeprefix("`json").removesuffix("`").strip()
             data = json.loads(clean_json)
             validated = TriageOutput(**data)
-            return validated.model_dump()
+            mark_completed(validated)
         except Exception as repair_e:
             with open("logs/quarantine.jsonl", "a", encoding="utf-8") as log_f:
                 log_f.write(json.dumps({
-                    "input": payload.text,
+                    "input": payload_text,
                     "prompt_version": "v1",
                     "raw_output": repaired_output,
                     "error": str(repair_e)
                 }) + "\n")
-            return JSONResponse(status_code=422, content={"error": "Failed to generate valid output", "details": str(repair_e)})
+            mark_failed(f"Failed to generate valid output: {str(repair_e)}")
 
+@app.post("/triage", summary="Triage Support Message (Background)", status_code=202)
+async def triage_message_background(payload: TriageInput, background_tasks: BackgroundTasks):
+    # Idempotency check
+    idemp_key = payload.idempotency_key
+    if not idemp_key:
+        # Fallback to hashing the payload if no explicit key is provided
+        idemp_key = hashlib.sha256(payload.text.encode('utf-8')).hexdigest()
+        
+    conn = get_db()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT id, status FROM triage_jobs WHERE idempotency_key = %s", (idemp_key,))
+    existing = cursor.fetchone()
+    
+    if existing:
+        conn.close()
+        return {"job_id": existing["id"], "status": existing["status"], "message": "Job already exists."}
+        
+    job_id = str(uuid.uuid4())
+    cursor.execute(
+        "INSERT INTO triage_jobs (id, idempotency_key, status) VALUES (%s, %s, %s)",
+        (job_id, idemp_key, "pending")
+    )
+    conn.commit()
+    conn.close()
+    
+    background_tasks.add_task(process_triage_job, job_id, payload.text)
+    return {"job_id": job_id, "status": "pending"}
 
-
+@app.get("/triage/{job_id}", summary="Get Triage Job Status", response_model=TriageJobResponse)
+async def get_triage_status(job_id: str):
+    conn = get_db()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT * FROM triage_jobs WHERE id = %s", (job_id,))
+    job = cursor.fetchone()
+    conn.close()
+    
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    result = None
+    if job["status"] == "completed":
+        result = TriageOutput(
+            category=job["category"],
+            urgency=job["urgency"],
+            confidence=job["confidence"],
+            reason=job["reason"]
+        )
+        
+    return TriageJobResponse(
+        job_id=job["id"],
+        status=JobStatusEnum(job["status"]),
+        result=result,
+        error=job["error"]
+    )

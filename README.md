@@ -47,3 +47,9 @@ This endpoint uses the OpenAI client SDK to connect to **OpenRouter**. You can e
 - **Eval Score:** 8 out of 8 cases matched successfully (Date: 2026-08-12, Prompt version: v1).
 - **Cost Estimate:** Since we use openrouter/free, the cost for one call is $0.00. An estimated 10,000 requests per day will cost exactly $0.00 (though rate limits of 50 calls/day apply).
 - **What I'd fix with another day:** Implement an in-memory cache to skip model calls for identical support messages.
+
+## Assignment BE-06: Background Job
+The /triage endpoint now implements the professional pattern for slow tasks: **accept fast, work in the background, report status.**
+- POST /triage returns a 202 Accepted instantly and hands off the LLM call to a background worker.
+- It includes idempotency keys: duplicate requests will safely return the existing job_id.
+- Track progress via GET /triage/{job_id}, checking if the status is pending, processing, completed, or ailed.
