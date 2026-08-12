@@ -33,15 +33,24 @@ def fetch_and_cache(url: str, filename: str) -> str:
             
     time.sleep(0.5)
     headers = {"User-Agent": USER_AGENT}
-    response = requests.get(url, headers=headers, timeout=10)
     
-    if response.status_code == 200:
-        html = response.text
-        with open(cache_path, "w", encoding="utf-8") as f:
-            f.write(html)
-        return html
-    else:
-        raise Exception(f"Failed to fetch {url}, status: {response.status_code}")
+    for attempt in range(2):
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            html = response.text
+            with open(cache_path, "w", encoding="utf-8") as f:
+                f.write(html)
+            return html
+        elif response.status_code in [404, 403]:
+            print(f"Skipping {url} due to {response.status_code}")
+            return None
+        elif response.status_code >= 500:
+            print(f"Server error {response.status_code} on {url}, retrying...")
+            time.sleep(1)
+        else:
+            raise Exception(f"Failed to fetch {url}, status: {response.status_code}")
+            
+    return None
 
 def get_book_links(html: str, base_url: str) -> list:
     soup = BeautifulSoup(html, "html.parser")
@@ -59,8 +68,9 @@ def discover_all_books():
     for page_num in range(1, 4):
         url = f"{base_catalogue_url}page-{page_num}.html"
         html = fetch_and_cache(url, f"catalogue-page-{page_num}.html")
-        links = get_book_links(html, url)
-        all_book_links.extend(links)
+        if html:
+            links = get_book_links(html, url)
+            all_book_links.extend(links)
         
     return list(set(all_book_links))
 
@@ -109,12 +119,23 @@ def extract_book_details(html: str, url: str) -> dict:
     }
 
 if __name__ == "__main__":
+    start_time = time.time()
+    
     unique_links = discover_all_books()
+    unique_links.append("https://books.toscrape.com/catalogue/this-book-does-not-exist_9999/index.html")
+    
     valid_records = []
     errors = []
+    failed_pages = 0
+    pages_fetched = 0
     
     for i, url in enumerate(unique_links):
         html = fetch_and_cache(url, f"book-{i}.html")
+        if not html:
+            failed_pages += 1
+            continue
+            
+        pages_fetched += 1
         record_raw = extract_book_details(html, url)
         try:
             record_validated = BookRecord(**record_raw)
@@ -128,4 +149,18 @@ if __name__ == "__main__":
     with open(os.path.join(OUTPUT_DIR, "errors.json"), "w", encoding="utf-8") as f:
         json.dump(errors, f, indent=2)
         
-    print(f"Validated records: {len(valid_records)}, Errors: {len(errors)}")
+    duration = time.time() - start_time
+    
+    run_report = {
+        "start_time": datetime.fromtimestamp(start_time, timezone.utc).isoformat(),
+        "duration_seconds": round(duration, 2),
+        "pages_fetched": pages_fetched,
+        "valid_records": len(valid_records),
+        "invalid_records": len(errors),
+        "failed_pages": failed_pages
+    }
+    
+    with open(os.path.join(OUTPUT_DIR, "run-report.json"), "w", encoding="utf-8") as f:
+        json.dump(run_report, f, indent=2)
+        
+    print(f"Validated records: {len(valid_records)}, Errors: {len(errors)}, Failed pages: {failed_pages}")
