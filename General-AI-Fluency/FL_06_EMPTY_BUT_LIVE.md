@@ -20,7 +20,7 @@ The project is officially deployed and live on the internet!
 ## 4. Verification & Screenshots
 I opened the URL on my smartphone to verify that it resolves correctly on a separate network and device, proving it is truly live and not just a local cache.
 
-*(See the attached screenshot/photo in the assignment submission).*
+![Live on Phone](../assets/empty_live_phone.jpg)
 
 ---
 
