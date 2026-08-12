@@ -24,3 +24,22 @@ pip install -r requirements.txt && uvicorn main:app --reload --port 8000
 | POST        | `/tasks` | Creates a new task (requires JSON body with `title`) |
 | PUT         | `/tasks/{id}` | Updates an existing task's `title` or `done` status |
 | DELETE      | `/tasks/{id}` | Removes a task by ID |
+
+## Example `curl` Output
+
+```bash
+$ curl -i http://localhost:8000/tasks/1
+HTTP/1.1 200 OK
+date: Wed, 12 Aug 2026 17:00:00 GMT
+server: uvicorn
+content-length: 49
+content-type: application/json
+
+{"title":"Buy groceries","done":false,"id":1}
+```
+
+## Swagger UI Screenshot
+
+![Swagger UI](docs/swagger_screenshot.png)
+
+*(Note: Ensure you place your screenshot at `docs/swagger_screenshot.png` before pushing!)*
