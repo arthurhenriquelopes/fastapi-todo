@@ -13,6 +13,10 @@ class TaskBase(BaseModel):
     title: str = Field(..., min_length=1)
     done: bool = False
 
+class TaskCreate(BaseModel):
+    title: str
+    done: Optional[bool] = False
+
 class Task(TaskBase):
     id: int
 
@@ -21,6 +25,11 @@ tasks_db: List[dict] = [
     {"id": 2, "title": "Read a book", "done": True},
     {"id": 3, "title": "Write some code", "done": False}
 ]
+
+def get_next_id() -> int:
+    if not tasks_db:
+        return 1
+    return max(task["id"] for task in tasks_db) + 1
 
 @app.get("/")
 async def root():
@@ -40,3 +49,17 @@ async def get_task(task_id: int):
         if task["id"] == task_id:
             return task
     raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+@app.post("/tasks", response_model=Task, status_code=201)
+async def create_task(task_in: dict):
+    title = task_in.get("title")
+    if title is None or str(title).strip() == "":
+        return JSONResponse(status_code=400, content={"error": "title is required and cannot be empty"})
+    
+    new_task = {
+        "id": get_next_id(),
+        "title": str(title).strip(),
+        "done": bool(task_in.get("done", False))
+    }
+    tasks_db.append(new_task)
+    return new_task
