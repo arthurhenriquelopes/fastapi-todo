@@ -398,3 +398,32 @@ async def get_triage_status(job_id: str):
         result=result,
         error=job["error"]
     )
+
+
+# --- Inngest Integration ---
+from inngest.fastapi import serve
+from src.inngest_app.client import inngest_client
+from src.inngest_app.functions import ai_flow_execution
+import inngest
+
+inngest_route = serve(inngest_client, [ai_flow_execution])
+app.add_route("/api/inngest", inngest_route, methods=["GET", "POST", "PUT"])
+
+# Endpoint to trigger the flow from frontend
+from pydantic import BaseModel
+class FlowRunRequest(BaseModel):
+    nodes: dict
+    start_node_id: str
+
+@app.post("/api/flow/run")
+async def trigger_flow(req: FlowRunRequest):
+    await inngest_client.send(
+        inngest.Event(
+            name="ai/flow.run",
+            data={
+                "nodes": req.nodes,
+                "start_node_id": req.start_node_id
+            }
+        )
+    )
+    return {"status": "Flow triggered via Inngest"}
