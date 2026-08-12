@@ -211,6 +211,9 @@ from src.llm.schema import TriageInput, TriageOutput, CategoryEnum, UrgencyEnum
 
 @app.post("/triage", summary="Triage Support Message")
 async def triage_message(payload: TriageInput):
+    if os.environ.get("LLM_ENABLED") == "false":
+        return JSONResponse(status_code=503, content={"error": "LLM features are currently disabled via kill switch."})
+        
     if os.environ.get("LLM_STUB") == "1":
         return TriageOutput(
             category=CategoryEnum.other,
@@ -221,6 +224,7 @@ async def triage_message(payload: TriageInput):
         
     from src.llm.client import llm_client
     import json
+    import time
     from pydantic import ValidationError
     
     with open("prompts/triage-v1.md", "r", encoding="utf-8") as f:
@@ -232,18 +236,33 @@ async def triage_message(payload: TriageInput):
     ]
     
     def call_model(msgs):
+        start_time = time.time()
         res = llm_client.chat.completions.create(
             model=os.environ.get("LLM_MODEL", "openrouter/free"),
             messages=msgs,
             temperature=0.0
         )
+        duration_ms = int((time.time() - start_time) * 1000)
+        
+        # Cost logging
+        with open("logs/cost.jsonl", "a", encoding="utf-8") as cost_f:
+            cost_f.write(json.dumps({
+                "prompt_version": "v1",
+                "model": os.environ.get("LLM_MODEL", "openrouter/free"),
+                "input_tokens": res.usage.prompt_tokens if res.usage else 0,
+                "output_tokens": res.usage.completion_tokens if res.usage else 0,
+                "duration_ms": duration_ms
+            }) + "\n")
+            
         return res.choices[0].message.content
         
-    raw_output = call_model(messages)
+    try:
+        raw_output = call_model(messages)
+    except Exception as network_e:
+        return JSONResponse(status_code=504, content={"error": "LLM provider took too long or failed", "details": str(network_e)})
     
     # Parse and repair loop
     try:
-        # Strip markdown code blocks if any
         clean_json = raw_output.strip().removeprefix("`json").removesuffix("`").strip()
         data = json.loads(clean_json)
         validated = TriageOutput(**data)
@@ -254,7 +273,11 @@ async def triage_message(payload: TriageInput):
         messages.append({"role": "assistant", "content": raw_output})
         messages.append({"role": "user", "content": repair_msg})
         
-        repaired_output = call_model(messages)
+        try:
+            repaired_output = call_model(messages)
+        except Exception as network_e:
+             return JSONResponse(status_code=504, content={"error": "LLM provider took too long or failed during repair", "details": str(network_e)})
+             
         try:
             clean_json = repaired_output.strip().removeprefix("`json").removesuffix("`").strip()
             data = json.loads(clean_json)
@@ -269,5 +292,6 @@ async def triage_message(payload: TriageInput):
                     "error": str(repair_e)
                 }) + "\n")
             return JSONResponse(status_code=422, content={"error": "Failed to generate valid output", "details": str(repair_e)})
+
 
 
