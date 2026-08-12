@@ -1,8 +1,13 @@
+import os
+import psycopg2
+from psycopg2.extras import RealDictCursor
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional
-import sqlite3
+
+load_dotenv()
 
 app = FastAPI(
     title="Task API",
@@ -10,31 +15,11 @@ app = FastAPI(
     version="1.0"
 )
 
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/tasks_db")
+
 def get_db():
-    conn = sqlite3.connect("tasks.db")
-    conn.row_factory = sqlite3.Row
+    conn = psycopg2.connect(DATABASE_URL)
     return conn
-
-def init_db():
-    conn = get_db()
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            done BOOLEAN NOT NULL DEFAULT 0
-        )
-    ''')
-    cursor = conn.execute("SELECT COUNT(*) FROM tasks")
-    if cursor.fetchone()[0] == 0:
-        conn.executemany("INSERT INTO tasks (title, done) VALUES (?, ?)", [
-            ("Buy groceries", 0),
-            ("Read a book", 1),
-            ("Write some code", 0)
-        ])
-    conn.commit()
-    conn.close()
-
-init_db()
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc):
@@ -55,31 +40,35 @@ class TaskUpdate(BaseModel):
 class Task(TaskBase):
     id: int
 
-@app.get("/", summary="Root Endpoint", description="Returns API metadata.")
+@app.get("/", summary="Root Endpoint")
 async def root():
     return {"name": "Task API", "version": "1.0", "endpoints": ["/tasks"]}
 
-@app.get("/health", summary="Health Check", description="Returns ok if the API is running.")
+@app.get("/health", summary="Health Check")
 async def health():
     return {"status": "ok"}
 
-@app.get("/tasks", summary="List Tasks", description="Returns the complete list of tasks.", response_model=List[Task])
+@app.get("/tasks", summary="List Tasks", response_model=List[Task])
 async def get_tasks():
     conn = get_db()
-    tasks = conn.execute("SELECT * FROM tasks").fetchall()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT * FROM tasks ORDER BY id ASC")
+    tasks = cursor.fetchall()
     conn.close()
     return [{"id": t["id"], "title": t["title"], "done": bool(t["done"])} for t in tasks]
 
-@app.get("/tasks/{task_id}", summary="Get Task", description="Returns a specific task by ID.", response_model=Task)
+@app.get("/tasks/{task_id}", summary="Get Task", response_model=Task)
 async def get_task(task_id: int):
     conn = get_db()
-    task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT * FROM tasks WHERE id = %s", (task_id,))
+    task = cursor.fetchone()
     conn.close()
     if task is None:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
     return {"id": task["id"], "title": task["title"], "done": bool(task["done"])}
 
-@app.post("/tasks", summary="Create Task", description="Creates a new task.", response_model=Task, status_code=201)
+@app.post("/tasks", summary="Create Task", response_model=Task, status_code=201)
 async def create_task(task_in: dict):
     title = task_in.get("title")
     if title is None or str(title).strip() == "":
@@ -87,20 +76,26 @@ async def create_task(task_in: dict):
     
     done = bool(task_in.get("done", False))
     conn = get_db()
-    cursor = conn.execute("INSERT INTO tasks (title, done) VALUES (?, ?)", (str(title).strip(), done))
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute(
+        "INSERT INTO tasks (title, done) VALUES (%s, %s) RETURNING id",
+        (str(title).strip(), done)
+    )
+    task_id = cursor.fetchone()["id"]
     conn.commit()
-    task_id = cursor.lastrowid
     conn.close()
     
     return {"id": task_id, "title": str(title).strip(), "done": done}
 
-@app.put("/tasks/{task_id}", summary="Update Task", description="Updates an existing task.", response_model=Task)
+@app.put("/tasks/{task_id}", summary="Update Task", response_model=Task)
 async def update_task(task_id: int, task_in: dict):
     if not task_in:
         return JSONResponse(status_code=400, content={"error": "Body cannot be empty"})
     
     conn = get_db()
-    task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT * FROM tasks WHERE id = %s", (task_id,))
+    task = cursor.fetchone()
     
     if task is None:
         conn.close()
@@ -118,21 +113,26 @@ async def update_task(task_id: int, task_in: dict):
     if "done" in task_in:
         done = bool(task_in["done"])
         
-    conn.execute("UPDATE tasks SET title = ?, done = ? WHERE id = ?", (title, done, task_id))
+    cursor.execute(
+        "UPDATE tasks SET title = %s, done = %s WHERE id = %s",
+        (title, done, task_id)
+    )
     conn.commit()
     conn.close()
     
     return {"id": task_id, "title": title, "done": bool(done)}
 
-@app.delete("/tasks/{task_id}", summary="Delete Task", description="Deletes a task by ID.", status_code=204)
+@app.delete("/tasks/{task_id}", summary="Delete Task", status_code=204)
 async def delete_task(task_id: int):
     conn = get_db()
-    task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT * FROM tasks WHERE id = %s", (task_id,))
+    task = cursor.fetchone()
     if task is None:
         conn.close()
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
         
-    conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+    cursor.execute("DELETE FROM tasks WHERE id = %s", (task_id,))
     conn.commit()
     conn.close()
     return
