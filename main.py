@@ -2,12 +2,39 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional
+import sqlite3
 
 app = FastAPI(
     title="Task API",
     description="A simple CRUD API for a to-do list.",
     version="1.0"
 )
+
+def get_db():
+    conn = sqlite3.connect("tasks.db")
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    conn = get_db()
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            done BOOLEAN NOT NULL DEFAULT 0
+        )
+    ''')
+    cursor = conn.execute("SELECT COUNT(*) FROM tasks")
+    if cursor.fetchone()[0] == 0:
+        conn.executemany("INSERT INTO tasks (title, done) VALUES (?, ?)", [
+            ("Buy groceries", 0),
+            ("Read a book", 1),
+            ("Write some code", 0)
+        ])
+    conn.commit()
+    conn.close()
+
+init_db()
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc):
