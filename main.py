@@ -212,6 +212,11 @@ from fastapi import BackgroundTasks
 import uuid
 import hashlib
 
+from fastapi.staticfiles import StaticFiles
+import os
+os.makedirs("static/reports", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 @app.on_event("startup")
 async def startup_event():
     conn = get_db()
@@ -225,6 +230,15 @@ async def startup_event():
             urgency VARCHAR(50),
             confidence FLOAT,
             reason TEXT,
+            error TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS report_jobs (
+            id VARCHAR(36) PRIMARY KEY,
+            status VARCHAR(20) NOT NULL,
+            download_url TEXT,
             error TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -428,3 +442,106 @@ async def trigger_flow(req: FlowRunRequest):
     )
     return {"status": "Flow triggered via Inngest"}
 
+
+# --- PDF Report Generator Endpoint ---
+from fpdf import FPDF
+from datetime import datetime
+
+class ReportJobResponse(BaseModel):
+    job_id: str
+    status: str
+    download_url: Optional[str] = None
+    error: Optional[str] = None
+
+def generate_pdf_report(job_id: str):
+    try:
+        conn = get_db()
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # Mark as processing
+        cursor.execute("UPDATE report_jobs SET status = 'processing' WHERE id = %s", (job_id,))
+        conn.commit()
+        
+        # 1. Fetch data
+        cursor.execute("SELECT COUNT(*) as total, SUM(CASE WHEN done THEN 1 ELSE 0 END) as completed FROM tasks")
+        task_stats = cursor.fetchone()
+        
+        cursor.execute("SELECT category, count(*) as count FROM triage_jobs WHERE status='completed' GROUP BY category")
+        triage_stats = cursor.fetchall()
+        
+        # 2. Render PDF
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("helvetica", "B", 16)
+        pdf.cell(0, 10, "System Health & Data Report", ln=True, align='C')
+        pdf.ln(10)
+        
+        pdf.set_font("helvetica", "", 12)
+        pdf.cell(0, 10, f"Generated at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True)
+        pdf.ln(10)
+        
+        pdf.set_font("helvetica", "B", 14)
+        pdf.cell(0, 10, "1. Tasks Overview", ln=True)
+        pdf.set_font("helvetica", "", 12)
+        pdf.cell(0, 10, f"Total Tasks: {task_stats['total'] or 0}", ln=True)
+        pdf.cell(0, 10, f"Completed Tasks: {task_stats['completed'] or 0}", ln=True)
+        pdf.ln(10)
+        
+        pdf.set_font("helvetica", "B", 14)
+        pdf.cell(0, 10, "2. LLM Triage Statistics", ln=True)
+        pdf.set_font("helvetica", "", 12)
+        if not triage_stats:
+            pdf.cell(0, 10, "No triage jobs found.", ln=True)
+        else:
+            for row in triage_stats:
+                pdf.cell(0, 10, f"Category '{row['category']}': {row['count']} requests", ln=True)
+                
+        # Save PDF
+        filepath = f"static/reports/report_{job_id}.pdf"
+        pdf.output(filepath)
+        
+        # 3. Update job as completed
+        download_url = f"/static/reports/report_{job_id}.pdf"
+        cursor.execute("UPDATE report_jobs SET status = 'completed', download_url = %s WHERE id = %s", (download_url, job_id))
+        conn.commit()
+        conn.close()
+        
+    except Exception as e:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE report_jobs SET status = 'failed', error = %s WHERE id = %s", (str(e), job_id))
+        conn.commit()
+        conn.close()
+
+@app.post("/reports/generate", summary="Generate System Report (Background)", status_code=202)
+async def trigger_report(background_tasks: BackgroundTasks):
+    job_id = str(uuid.uuid4())
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO report_jobs (id, status) VALUES (%s, %s)",
+        (job_id, "pending")
+    )
+    conn.commit()
+    conn.close()
+    
+    background_tasks.add_task(generate_pdf_report, job_id)
+    return {"job_id": job_id, "status": "pending"}
+
+@app.get("/reports/{job_id}", summary="Get Report Job Status", response_model=ReportJobResponse)
+async def get_report_status(job_id: str):
+    conn = get_db()
+    cursor = conn.cursor(cursor_factory=RealDictCursor)
+    cursor.execute("SELECT * FROM report_jobs WHERE id = %s", (job_id,))
+    job = cursor.fetchone()
+    conn.close()
+    
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    return ReportJobResponse(
+        job_id=job["id"],
+        status=job["status"],
+        download_url=job["download_url"],
+        error=job["error"]
+    )

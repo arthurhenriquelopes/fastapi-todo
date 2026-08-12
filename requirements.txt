@@ -7,3 +7,5 @@ supabase
 openai
 
 inngest
+
+fpdf2
