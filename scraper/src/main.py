@@ -1,13 +1,29 @@
 import os
 import time
 import requests
+import json
+import re
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 from datetime import datetime, timezone
+from pydantic import BaseModel, HttpUrl, ValidationError
 
 CACHE_DIR = "cache"
+OUTPUT_DIR = "output"
 os.makedirs(CACHE_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 USER_AGENT = "FlyRankInternship-A9/1.0 (+https://github.com/arthurhenriquelopes/fastapi-todo)"
+
+class BookRecord(BaseModel):
+    title: str
+    product_url: HttpUrl
+    price_text: str
+    price_gbp: float
+    availability_text: str
+    rating_text: str
+    description: str | None
+    source_page: HttpUrl
+    fetched_at: str
 
 def fetch_and_cache(url: str, filename: str) -> str:
     cache_path = os.path.join(CACHE_DIR, filename)
@@ -53,9 +69,13 @@ def extract_book_details(html: str, url: str) -> dict:
     title = soup.find("h1").text if soup.find("h1") else None
     
     price_text = None
+    price_gbp = 0.0
     price_p = soup.find("p", class_="price_color")
     if price_p:
         price_text = price_p.text
+        match = re.search(r"[\d\.]+", price_text)
+        if match:
+            price_gbp = float(match.group())
         
     availability_text = None
     avail_p = soup.find("p", class_="availability")
@@ -80,6 +100,7 @@ def extract_book_details(html: str, url: str) -> dict:
         "title": title,
         "product_url": url,
         "price_text": price_text,
+        "price_gbp": price_gbp,
         "availability_text": availability_text,
         "rating_text": rating_text,
         "description": description,
@@ -89,12 +110,22 @@ def extract_book_details(html: str, url: str) -> dict:
 
 if __name__ == "__main__":
     unique_links = discover_all_books()
-    records = []
+    valid_records = []
+    errors = []
+    
     for i, url in enumerate(unique_links):
         html = fetch_and_cache(url, f"book-{i}.html")
-        record = extract_book_details(html, url)
-        records.append(record)
-    
-    if records:
-        print(records[0])
-    print(f"detail_pages={len(records)}")
+        record_raw = extract_book_details(html, url)
+        try:
+            record_validated = BookRecord(**record_raw)
+            valid_records.append(record_validated.model_dump(mode='json'))
+        except ValidationError as e:
+            errors.append({"url": url, "error": e.errors()})
+            
+    with open(os.path.join(OUTPUT_DIR, "books.json"), "w", encoding="utf-8") as f:
+        json.dump(valid_records, f, indent=2)
+        
+    with open(os.path.join(OUTPUT_DIR, "errors.json"), "w", encoding="utf-8") as f:
+        json.dump(errors, f, indent=2)
+        
+    print(f"Validated records: {len(valid_records)}, Errors: {len(errors)}")
