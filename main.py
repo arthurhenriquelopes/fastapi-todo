@@ -205,3 +205,18 @@ async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
         pass
     return
 
+
+# --- LLM Endpoint ---
+from src.llm.schema import TriageInput, TriageOutput, CategoryEnum, UrgencyEnum
+
+@app.post("/triage", summary="Triage Support Message")
+async def triage_message(payload: TriageInput):
+    if os.environ.get("LLM_STUB") == "1":
+        return TriageOutput(
+            category=CategoryEnum.other,
+            urgency=UrgencyEnum.normal,
+            confidence=1.0,
+            reason="Stub mode enabled."
+        ).model_dump()
+        
+    return {"message": "Model call goes here."}
