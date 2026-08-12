@@ -76,14 +76,19 @@ async def health():
 
 @app.get("/tasks", summary="List Tasks", description="Returns the complete list of tasks.", response_model=List[Task])
 async def get_tasks():
-    return tasks_db
+    conn = get_db()
+    tasks = conn.execute("SELECT * FROM tasks").fetchall()
+    conn.close()
+    return [{"id": t["id"], "title": t["title"], "done": bool(t["done"])} for t in tasks]
 
 @app.get("/tasks/{task_id}", summary="Get Task", description="Returns a specific task by ID.", response_model=Task)
 async def get_task(task_id: int):
-    for task in tasks_db:
-        if task["id"] == task_id:
-            return task
-    raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    conn = get_db()
+    task = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
+    conn.close()
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    return {"id": task["id"], "title": task["title"], "done": bool(task["done"])}
 
 @app.post("/tasks", summary="Create Task", description="Creates a new task.", response_model=Task, status_code=201)
 async def create_task(task_in: dict):
