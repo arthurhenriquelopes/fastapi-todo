@@ -20,6 +20,10 @@ The foundation of the project is a blazing-fast CRUD API built with **FastAPI** 
 - **Persistence:** Fully containerized using `docker-compose.yml` to ensure deterministic setups.
 - **Documentation:** Interactive Swagger UI generated automatically.
 
+<p align="center">
+  <img src="assets/mac_swagger.jpg" alt="Swagger UI" width="800">
+</p>
+
 ```json
 // Example Response: GET /tasks
 {
@@ -38,6 +42,10 @@ To secure the application, I integrated **Supabase Auth**.
 - **Features:** User Sign-up, Login, and Logout routes.
 - **Protection:** Protected profile routes wrapped in a dependency that verifies the JWT token signature and decodes the user session.
 - **Swagger Integration:** Configured the OpenAPI spec to natively accept Bearer Tokens for testing authenticated routes.
+
+<p align="center">
+  <img src="assets/mac_auth.jpg" alt="Swagger Auth" width="800">
+</p>
 
 ```python
 # Protected Route Example
@@ -63,6 +71,10 @@ AI calls are slow. Professional APIs don't block the main thread waiting for an 
 - **Workflow:** The endpoint immediately returns `202 Accepted` and a `job_id`. Clients can poll `GET /triage/{job_id}` to retrieve the results.
 - **Idempotency:** Implemented SHA-256 payload hashing so identical requests won't trigger duplicate LLM calls, saving API quota.
 
+<p align="center">
+  <img src="assets/mac_triage.png" alt="LLM Architecture Diagram" width="800">
+</p>
+
 ```python
 @inngest.create_function(id="process-triage", name="Process Ticket Triage")
 async def process_triage(ctx, step):
@@ -80,6 +92,10 @@ async def process_triage(ctx, step):
 A complete Visual AI Workflow Editor where developers can design branching logic for LLMs.
 - **Frontend (React Flow):** A Vite + Tailwind application (`frontend/`) where users can add nodes, write prompts, and draw YES/NO paths visually.
 - **Backend Orchestration (Inngest):** The graph is sent to the FastAPI backend, where an **Inngest** function dynamically traverses the nodes. At each node, it sends the prompt to the AI, forcing a binary `YES/NO` answer, and routes the execution path accordingly.
+
+<p align="center">
+  <img src="assets/mac_react_flow.png" alt="React Flow Visualizer" width="800">
+</p>
 
 ```jsx
 // React Flow Custom Node Example
