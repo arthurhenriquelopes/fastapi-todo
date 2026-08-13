@@ -34,12 +34,19 @@
         }
     </script>
     <style>
-        body { background-color: #F8FAFC; color: #0F172A; }
-        .hero-bg {
-            background-image: linear-gradient(rgba(248, 250, 252, 0.85), rgba(248, 250, 252, 0.98)), url('assets/portfolio_hero_accepted_1786573545131.jpg');
-            background-size: cover;
-            background-position: center;
+        body { 
+            background-color: #F8FAFC; 
+            color: #0F172A; 
+            /* Subtle Graph Paper / Grid Background */
+            background-image: 
+                linear-gradient(to right, #E2E8F0 1px, transparent 1px),
+                linear-gradient(to bottom, #E2E8F0 1px, transparent 1px);
+            background-size: 40px 40px;
             background-attachment: fixed;
+        }
+        .hero-bg {
+            /* Radial fade to make the text pop over the grid */
+            background: radial-gradient(circle at center, transparent 0%, #F8FAFC 100%);
         }
         
         /* Floating bottom nav for mobile */
