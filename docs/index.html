@@ -44,9 +44,16 @@
             background-size: 40px 40px;
             background-attachment: fixed;
         }
+        .vignette-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+            background: radial-gradient(circle, transparent 40%, #F8FAFC 100%);
+            z-index: -1;
+        }
         .hero-bg {
-            /* Radial fade to make the text pop over the grid */
-            background: radial-gradient(circle at center, transparent 0%, #F8FAFC 100%);
+            /* Text protection overlay */
+            background: radial-gradient(circle at center, rgba(248,250,252,0) 0%, #F8FAFC 100%);
         }
         
         /* Floating bottom nav for mobile */
@@ -305,9 +312,69 @@
         <p>Designed by Arthur Henrique Lopes.</p>
     </footer>
 
+    <!-- Vignette Overlay -->
+    <div class="vignette-overlay"></div>
+
+    <!-- Music Toggle Button -->
+    <button onclick="toggleMusic()" class="fixed bottom-24 md:bottom-8 right-6 bg-white border border-slate-200 shadow-lg rounded-full px-4 py-2 font-mono text-xs text-slate-600 flex items-center gap-2 hover:bg-slate-50 transition-colors z-50">
+        <i data-feather="music" class="w-3 h-3"></i> Lofi: <span id="music-status" class="font-bold text-slate-400">OFF</span>
+    </button>
+    <div id="youtube-player" style="display:none;"></div>
+
     <!-- Initialize Feather Icons -->
     <script>
-      feather.replace()
+      feather.replace();
+    </script>
+
+    <!-- Comfy Sounds & Music Script -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script>
+        // 1. UI Click Sound (Web Audio API)
+        let audioCtx;
+        function playClickSound() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(300, audioCtx.currentTime + 0.1);
+            
+            gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+            
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
+        }
+        document.addEventListener('click', playClickSound);
+
+        // 2. Comfy Background Music (Lofi Girl YouTube Stream)
+        var player;
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('youtube-player', {
+                height: '0', width: '0', videoId: 'jfKfPfyJRdo',
+                playerVars: { 'autoplay': 0, 'controls': 0 }
+            });
+        }
+        let musicPlaying = false;
+        function toggleMusic() {
+            if(musicPlaying) { 
+                player.pauseVideo(); 
+                musicPlaying = false; 
+                document.getElementById('music-status').innerText = 'OFF';
+                document.getElementById('music-status').classList.replace('text-electric-blue', 'text-slate-400');
+            } else { 
+                player.playVideo(); 
+                musicPlaying = true; 
+                document.getElementById('music-status').innerText = 'ON';
+                document.getElementById('music-status').classList.replace('text-slate-400', 'text-electric-blue');
+            }
+        }
     </script>
 </body>
 </html>
