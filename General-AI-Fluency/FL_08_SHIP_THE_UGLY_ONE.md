@@ -21,7 +21,7 @@ I sent the live link to a Senior Backend Engineer friend to review.
 ## 3. The "Still Ugly" List
 *Things I know are rough and need fixing in the polish phase:*
 
-1. **The Missing Photo:** The bio section literally says "[Real Photo Pending]" in a gray circle. I need to take a good headshot.
+1. **The Missing Photo:** *(RESOLVED)* I pulled my real GitHub avatar and updated the bio with my actual professional history (Midas internship, Open-Source Linux platform, etc.) from my main portfolio.
 2. **Missing Live Demo URL:** As my reviewer noted, the CTA goes straight to GitHub. I need to deploy the actual FastAPI server to Render/Fly.io so I can link a live Swagger UI in the case study.
 3. **Mobile Padding:** The padding on the case study cards looks a bit cramped when viewed on smaller smartphone screens.
 4. **Hero Background Contrast:** The faint blue brackets on the slate background look great on desktop, but on mobile, they clash slightly with the text if the background doesn't scale properly.
