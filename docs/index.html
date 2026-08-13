@@ -3,39 +3,153 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arthur Henrique - Portfolio</title>
+    <title>Arthur Henrique Lopes | Backend AI Engineer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-color: #F8FAFC;
+            --text-color: #0F172A;
+            --accent-color: #2563EB;
+        }
+        
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #F8FAFC;
-            color: #0F172A;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
             margin: 0;
-            text-align: center;
+            padding: 0;
+            background-image: url('assets/portfolio_hero_accepted_1786573545131.jpg');
+            background-size: cover;
+            background-attachment: fixed;
+            background-blend-mode: lighten;
         }
-        h1 {
-            font-weight: 600;
-            margin-bottom: 0.5rem;
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: rgba(248, 250, 252, 0.95);
+            min-height: 100vh;
         }
-        p {
-            font-family: 'JetBrains Mono', monospace;
-        }
-        .accent {
-            color: #2563EB;
+
+        h1, h2, h3 {
+            font-weight: 800;
             margin-top: 2rem;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+            color: var(--accent-color);
+        }
+
+        .claim {
+            font-size: 1.25rem;
+            font-weight: 600;
+            border-left: 4px solid var(--accent-color);
+            padding-left: 1rem;
+            margin: 2rem 0;
+        }
+
+        code, pre {
+            font-family: 'JetBrains Mono', monospace;
+            background: #E2E8F0;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
             font-size: 0.9rem;
+        }
+
+        .case-study {
+            background: white;
+            border: 1px solid #CBD5E1;
+            padding: 2rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            margin: 1rem 0;
+            border: 1px solid #E2E8F0;
+        }
+
+        .cta-btn {
+            display: inline-block;
+            background-color: var(--accent-color);
+            color: white;
+            text-decoration: none;
+            padding: 1rem 2rem;
+            border-radius: 4px;
+            font-weight: 600;
+            margin-top: 1rem;
+            transition: background 0.3s;
+        }
+
+        .cta-btn:hover {
+            background-color: #1D4ED8;
+        }
+        
+        .bio-section {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+        }
+        .bio-placeholder {
+            width: 150px;
+            height: 150px;
+            background: #CBD5E1;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            text-align: center;
         }
     </style>
 </head>
 <body>
-    <div>
-        <h1>{ AHL }</h1>
-        <h2>Arthur Henrique Lopes</h2>
-        <p>Backend AI Engineer</p>
-        <p class="accent">Status: Empty but Live (Work in progress...)</p>
+    <div class="container">
+        <header>
+            <h1>{ AHL }</h1>
+            <h2>Arthur Henrique Lopes</h2>
+            <p>Backend AI Engineer</p>
+            <div class="claim">
+                "I engineer resilient Backend AI systems that scale securely, so your team doesn't wake up to unhandled LLM exceptions at 3 AM."
+            </div>
+        </header>
+
+        <section class="case-study">
+            <h2>Flagship Case: AI Customer Support Triage API</h2>
+            <p><strong>The Problem:</strong> LLM calls are slow. Putting them on the main thread causes timeouts and blocked requests under load.</p>
+            <p><strong>The Decision:</strong> I completely decoupled the LLM logic using FastAPI BackgroundTasks (and Inngest). I built a strict JSON Repair loop to handle hallucinated schemas, and enforced idempotency via SHA-256 hashes.</p>
+            <p><strong>The Outcome:</strong> The main API now returns a <code>202 Accepted</code> in milliseconds, while the heavy AI reasoning happens safely in the background.</p>
+            <img src="assets/llm_architecture_diagram_1786570417599.jpg" alt="LLM Architecture Diagram">
+        </section>
+
+        <section class="case-study">
+            <h2>Secondary Case: The Polite Scraper Pipeline</h2>
+            <p><strong>The Problem:</strong> Scraping data for AI RAG pipelines often results in rate limits and messy, unstructured HTML dumps.</p>
+            <p><strong>The Decision:</strong> Built a Python scraper enforcing strict rate limits and parsing directly into Pydantic models to guarantee clean data ingestion into PostgreSQL.</p>
+            <img src="assets/swagger_screenshot_1786554952333.jpg" alt="Swagger API Spec">
+        </section>
+
+        <section class="case-study bio-section">
+            <div class="bio-placeholder">[Real Photo Pending]</div>
+            <div>
+                <h3>Who am I?</h3>
+                <p>I am direct, technical, and passionate about solving complex infrastructure problems. I believe AI should be treated as just another unreliable microservice: expect it to fail, and build fallbacks.</p>
+            </div>
+        </section>
+
+        <div style="text-align: center; margin: 4rem 0;">
+            <h3>Ready to see the actual code?</h3>
+            <p>Stop reading marketing copy. Go judge my actual architecture and commits.</p>
+            <a href="https://github.com/arthurhenriquelopes/fastapi-todo" class="cta-btn">Review Monorepo on GitHub</a>
+        </div>
     </div>
 </body>
 </html>
